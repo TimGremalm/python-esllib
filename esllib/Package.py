@@ -1,4 +1,5 @@
 from esllib.conversion import int_to_hexstring, hexstring_to_int, utf8_to_utf16hexstring, utf16hexstring_to_utf8
+from esllib.enums import AnswerTagStatus
 
 
 class Answer:
@@ -42,7 +43,7 @@ class Answer:
 	def __repr__(self):
 		"""
 		Build and return a answer package
-		:return: string representing answer package
+		:return: str representing answer package
 		"""
 		# Start with packet, add start and length after
 		out = ""
@@ -57,4 +58,36 @@ class Answer:
 		return out
 
 	def __str__(self):
-		return ""
+		"""
+		Build a human readable packet
+		:return: str
+		"""
+		out = "Answer package\n"
+		out += "Part\t\t\t\t\tLength\tData\n"
+		out += "Start\t\t\t\t\t1\t\t@\n"
+		out += "Length\t\t\t\t\t4\t\t0012 (18 bytes)\n"
+		out += "ServiceCode\t\t\t\t4\t\t%s (%d)\n" % (int_to_hexstring(self.service_code, little_endian=False,
+																		number_of_hex_digits=4), self.service_code)
+		out += "Display Tag ID\t\t\t6\t\t%s\n" % self.display_tag_id
+		out += "RSSI\t\t\t\t\t2\t\t%s (%d-254=%d)\n" % (int_to_hexstring(self.rssi+254, little_endian=False,
+																		number_of_hex_digits=2),
+																		self.rssi+254, self.rssi)
+		if self.tag_status in AnswerTagStatus:
+			out += "TagStatus\t\t\t\t2\t\t%s (%s)\n" % (int_to_hexstring(self.tag_status, little_endian=False,
+																		number_of_hex_digits=2),
+																		AnswerTagStatus[self.tag_status])
+		else:
+			out += "TagStatus\t\t\t\t2\t\t%s (%s)\n" % (int_to_hexstring(self.tag_status, little_endian=False,
+																		number_of_hex_digits=2),
+																		"Unknown")
+		out += "Volt\t\t\t\t\t2\t\t%s (%d=%.1fV)\n" % (int_to_hexstring(int(self.volt*10), little_endian=False,
+																		number_of_hex_digits=2), int(self.volt*10),
+																		self.volt)
+		out += "Temperature\t\t\t\t2\t\t%s (%d degree Celsius)\n" % (int_to_hexstring(self.temperature,
+																						little_endian=False,
+																						number_of_hex_digits=2),
+																						self.temperature)
+		return out
+
+
+print(Answer("@00124E23061C95AD541F11").__str__())
