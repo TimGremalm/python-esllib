@@ -21,7 +21,17 @@ class Answer:
 	def __init__(self, raw="", service_code=0, display_tag_id="", rssi=0, tag_status=0, volt=0.0, temperature=0):
 		if len(raw) > 0:
 			self._raw = raw
+			if len(self._raw) != 23:
+				raise Exception(f'Answer package is always a 23 byte string, this string is {len(self._raw)} Packet: {self._raw}')
+			self.length = hexstring_to_int(self._raw[1:5], little_endian=False)
+			self.service_code = hexstring_to_int(self._raw[5:9], little_endian=False)
+			self.display_tag_id = self._raw[9:15]
+			self.rssi = hexstring_to_int(self._raw[15:17], little_endian=False)-254
+			self.tag_status = hexstring_to_int(self._raw[17:19], little_endian=False)
+			self.volt = float(hexstring_to_int(self._raw[19:21], little_endian=False))/10
+			self.temperature = hexstring_to_int(self._raw[21:23], little_endian=False)
 		else:
+			self.length = 0
 			self.service_code = service_code
 			self.display_tag_id = display_tag_id
 			self.rssi = rssi
