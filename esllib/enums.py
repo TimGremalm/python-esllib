@@ -45,6 +45,15 @@ FontStyles = {
 	0xFD: 'ImageX2',
 	0xFE: 'Image'
 }
+FontStylesInv = {v: k for k, v in FontStyles.items()}
+
+DrawStyles = {
+	0x00: 'Normal',
+	0x55: 'Red',
+	0xAA: 'Red and Inversed FG BG',
+	0xFF: 'Inverse FG BG'
+}
+DrawStylesInv = {v: k for k, v in DrawStyles.items()}
 
 PatternsCodes = {
 	0x30: 'UpdatePart1',			# Partial update of frame buffer, useful for simple updates?
@@ -69,6 +78,7 @@ PatternsCodes = {
 	0x49: 'Key',
 	0x53: 'Bind'
 }
+PatternsCodesInv = {v: k for k, v in PatternsCodes.items()}
 
 AnswerTagStatus = {0x4E: 'Failed',
 					0x54: 'Success',
@@ -79,3 +89,4 @@ AnswerTagStatus = {0x4E: 'Failed',
 					0xE5: 'ERRE5',
 					0xE6: 'ERRE6'
 }
+AnswerTagStatusInv = {v: k for k, v in AnswerTagStatus.items()}

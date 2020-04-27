@@ -1,5 +1,75 @@
 from esllib.conversion import int_to_hexstring, hexstring_to_int, utf8_to_utf16hexstring, utf16hexstring_to_utf8
-from esllib.enums import AnswerTagStatus
+from esllib.enums import AnswerTagStatus, DrawStyles, FontStyles
+
+
+class EntityText:
+	"""
+	Text entity
+
+	Part					Length	Data
+	DataLength				2		07(7*2=14 bytes length of following segment) 15(21*2=42B)
+	Vertical				3		010(1), 020(2), FF0(255), 001(256), FF1(511), 002(512)
+	Horizontal				3		001(1), 003(3), 0FF(255), 1FF(511), 200(512)
+	DrawStyle				2		00(Normal), 55(Red), AA(Red and Inversed FG BG), FF(Inverse FG BG)
+	FontStyle				2		See Font Styles
+	Text							0041(A) UTF-16 00410042(AB)
+	"""
+	def __init__(self, raw="", vertical=0, horizontal=0, draw_style=0, font_style=0, text=""):
+		if len(raw) > 0:
+			self._raw = raw
+			self.length = hexstring_to_int(self._raw[0:2], little_endian=False)*2
+			if len(self._raw) != self.length+2:
+				raise Exception(f'Answer package is always a 23 byte string, this string is {len(self._raw)} Packet: {self._raw}')
+			self.vertical = hexstring_to_int(self._raw[2:5], little_endian=True)
+			self.horizontal = hexstring_to_int(self._raw[5:8], little_endian=False)
+			self.draw_style = hexstring_to_int(self._raw[8:10], little_endian=False)
+			self.font_style = hexstring_to_int(self._raw[10:12], little_endian=False)
+			self.text = utf16hexstring_to_utf8(self._raw[12:])
+		else:
+			self.length = 0
+			self.vertical = vertical
+			self.horizontal = horizontal
+			self.draw_style = draw_style
+			self.font_style = font_style
+			self.text = text
+
+	def __repr__(self):
+		"""
+		Build and return a text entity package
+		:return: str representing entity
+		"""
+		# Start with packet, then add length of packet
+		out = ""
+		out += int_to_hexstring(self.vertical, little_endian=True, number_of_hex_digits=3)
+		out += int_to_hexstring(self.horizontal, little_endian=False, number_of_hex_digits=3)
+		out += int_to_hexstring(self.draw_style, little_endian=False, number_of_hex_digits=2)
+		out += int_to_hexstring(self.font_style, little_endian=False, number_of_hex_digits=2)
+		out += utf8_to_utf16hexstring(self.text)
+		length = int_to_hexstring(int(len(out)/2), little_endian=False, number_of_hex_digits=2)
+		out = length + out
+		return out
+
+	def __str__(self):
+		"""
+		Build a human readable packet
+		:return: str
+		"""
+		out = "Entity Text package\n"
+		out += "Part\t\t\t\t\tLength\tData\n"
+		length = len(self.__repr__())-2
+		out += "DataLengthSegment\t\t2\t\t%s (%d*2=%d bytes)\n" % (int_to_hexstring(int(length/2), little_endian=False, number_of_hex_digits=2), int(length/2), length)
+		out += "Vertical\t\t\t\t3\t\t%s (%d)\n" % (int_to_hexstring(self.vertical, little_endian=True, number_of_hex_digits=3), self.vertical)
+		out += "Horizontal\t\t\t\t3\t\t%s (%d)\n" % (int_to_hexstring(self.horizontal, little_endian=False, number_of_hex_digits=3), self.horizontal)
+		if self.draw_style in DrawStyles:
+			out += "DrawStyle\t\t\t\t2\t\t%s (%s)\n" % (int_to_hexstring(self.draw_style, little_endian=False, number_of_hex_digits=2), DrawStyles[self.draw_style])
+		else:
+			out += "DrawStyle\t\t\t\t2\t\t%s (Unknown)\n" % int_to_hexstring(self.draw_style, little_endian=False, number_of_hex_digits=2)
+		if self.font_style in FontStyles:
+			out += "FontStyle\t\t\t\t2\t\t%s (%s)\n" % (int_to_hexstring(self.font_style, little_endian=False, number_of_hex_digits=2), FontStyles[self.font_style])
+		else:
+			out += "FontStyle\t\t\t\t2\t\t%s (Unknown)\n" % int_to_hexstring(self.font_style, little_endian=False, number_of_hex_digits=2)
+		out += "Text\t\t\t\t\t\t\t%s (%s)" % (utf8_to_utf16hexstring(self.text), self.text)
+		return out
 
 
 class EntityLEDData:
@@ -183,3 +253,6 @@ class Answer:
 
 # print(Answer("@00124E23061C95AD541F11").__str__())
 # print(EntityLEDData("07044E2E00ED0003").__str__())
+# print(EntityText("1701000100020059006F0020006D0061006D006D00610021").__str__())
+# print(EntityText("0701000100020041").__str__())
+# print(EntityText("09010001000200410061").__str__())
