@@ -179,6 +179,88 @@ class EntityBarcode:
 		return out
 
 
+class EntityRectangle:
+	"""
+	Rectangle entity, no support in Demo Tool
+
+	Part					Length	Data
+	DataLengthSegment		2		0B(11*2=22 bytes for rectangle)
+	Vertical				3		010(1), 020(2), FF0(255), 001(256), FF1(511), 002(512)
+	Horizontal				3		001(1), 003(3), 0FF(255), 1FF(511), 200(512)
+	FontStyle				2		64(Rectangle?)
+	DrawStyle				2		00(Normal), 55(Red), AA(Red and Inversed FG BG), FF(Inverse FG BG)
+	Height					4		0032(50px?)
+	Width					4		0032(50px?)
+	Border?					4		0000 (Hardcoded?)
+	"""
+	def __init__(self, raw="", vertical=0, horizontal=0, draw_style=0, height=0, width=0, border=0):
+		if len(raw) > 0:
+			self._raw = raw
+			self.length = hexstring_to_int(self._raw[0:2], little_endian=False)*2
+			if self.length != 22:
+				raise Exception(f'Rectangle package is always 2+22 byte.')
+			self.vertical = hexstring_to_int(self._raw[2:5], little_endian=True)
+			self.horizontal = hexstring_to_int(self._raw[5:8], little_endian=False)
+			self.font_style = hexstring_to_int(self._raw[8:10], little_endian=False)
+			if self.font_style != FontStylesInv['Rectangle']:
+				raise Exception(f'Font style must be 0x64(Rectangle) in a Rectangle package.')
+			self.draw_style = hexstring_to_int(self._raw[10:12], little_endian=False)
+			self.height = hexstring_to_int(self._raw[12:16], little_endian=False)
+			self.width = hexstring_to_int(self._raw[16:20], little_endian=False)
+			self.border = hexstring_to_int(self._raw[20:24], little_endian=False)
+		else:
+			self.length = 0
+			self.vertical = vertical
+			self.horizontal = horizontal
+			self.font_style = FontStylesInv['Rectangle']
+			self.draw_style = draw_style
+			self.height = height
+			self.width = width
+			self.border = border
+
+	def __repr__(self):
+		"""
+		Build and return a rectangle entity package
+		:return: str representing entity
+		"""
+		# Start with packet, then add length of packet
+		out = ""
+		out += int_to_hexstring(self.vertical, little_endian=True, number_of_hex_digits=3)
+		out += int_to_hexstring(self.horizontal, little_endian=False, number_of_hex_digits=3)
+		out += int_to_hexstring(self.font_style, little_endian=False, number_of_hex_digits=2)
+		out += int_to_hexstring(self.draw_style, little_endian=False, number_of_hex_digits=2)
+		out += int_to_hexstring(self.height, little_endian=False, number_of_hex_digits=4)
+		out += int_to_hexstring(self.width, little_endian=False, number_of_hex_digits=4)
+		out += int_to_hexstring(self.border, little_endian=False, number_of_hex_digits=4)
+		length = int_to_hexstring(int(len(out)/2), little_endian=False, number_of_hex_digits=2)
+		out = length + out
+		return out
+
+	def __str__(self):
+		"""
+		Build a human readable packet
+		:return: str
+		"""
+		out = "Entity Rectangle package\n"
+		out += "Part\t\t\t\t\tLength\tData\n"
+		length = len(self.__repr__())-2
+		out += "DataLengthSegment\t\t2\t\t%s (%d*2=%d bytes)\n" % (int_to_hexstring(int(length/2), little_endian=False, number_of_hex_digits=2), int(length/2), length)
+		out += "Vertical\t\t\t\t3\t\t%s (%d)\n" % (int_to_hexstring(self.vertical, little_endian=True, number_of_hex_digits=3), self.vertical)
+		out += "Horizontal\t\t\t\t3\t\t%s (%d)\n" % (int_to_hexstring(self.horizontal, little_endian=False, number_of_hex_digits=3), self.horizontal)
+		if self.font_style in FontStyles:
+			out += "FontStyle\t\t\t\t2\t\t%s (%s)\n" % (int_to_hexstring(self.font_style, little_endian=False, number_of_hex_digits=2), FontStyles[self.font_style])
+		else:
+			out += "FontStyle\t\t\t\t2\t\t%s (Unknown)\n" % int_to_hexstring(self.font_style, little_endian=False, number_of_hex_digits=2)
+		if self.draw_style in DrawStyles:
+			out += "DrawStyle\t\t\t\t2\t\t%s (%s)\n" % (int_to_hexstring(self.draw_style, little_endian=False, number_of_hex_digits=2), DrawStyles[self.draw_style])
+		else:
+			out += "DrawStyle\t\t\t\t2\t\t%s (Unknown)\n" % int_to_hexstring(self.draw_style, little_endian=False, number_of_hex_digits=2)
+		out += "Height\t\t\t\t\t4\t\t%s (%d px?)\n" % (int_to_hexstring(self.height, little_endian=False, number_of_hex_digits=4), self.height)
+		out += "Width\t\t\t\t\t4\t\t%s (%d px?)\n" % (int_to_hexstring(self.width, little_endian=False, number_of_hex_digits=4), self.width)
+		out += "Border?\t\t\t\t\t4\t\t%s (%d px?)\n" % (int_to_hexstring(self.border, little_endian=False, number_of_hex_digits=4), self.border)
+		return out
+
+
 class EntityLEDData:
 	"""
 	This enity describes how the display tag will flash after a update.
@@ -367,3 +449,4 @@ class Answer:
 # print(EntityBarcode("0F01000100420088003100300052008A").__str__())
 # print(EntityBarcode("25010001004100880037003300310031003200350030003000300039003400310039003D008A").__str__())
 # print(EntityBarcode("25010001004900880037003300310031003200350030003000300039003400310039003D008A").__str__())
+# print(EntityRectangle("0B0100016400003200320001").__str__())

@@ -41,6 +41,7 @@ FontStyles = {
 	0x53: 'Barcode Code39 Ext',				# No support in Demo Tool
 	0x61: 'Horizontal Line',				# No support in Demo Tool
 	0x62: 'Vertical Line',					# No support in Demo Tool
+	0x64: 'Rectangle',						# No support in Demo Tool
 	0xFC: 'ImageCompress',
 	0xFD: 'ImageX2',
 	0xFE: 'Image'
