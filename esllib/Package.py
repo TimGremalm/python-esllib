@@ -1,5 +1,7 @@
+from esllib.barcode import validate_barcode128b_characters, validate_ean13_characters, \
+	calculate_barcode128b_check_digit, calculate_ean13_check_digit
 from esllib.conversion import int_to_hexstring, hexstring_to_int, utf8_to_utf16hexstring, utf16hexstring_to_utf8
-from esllib.enums import AnswerTagStatus, DrawStyles, FontStyles
+from esllib.enums import AnswerTagStatus, DrawStyles, FontStyles, FontStylesInv
 
 
 class EntityText:
@@ -69,6 +71,111 @@ class EntityText:
 		else:
 			out += "FontStyle\t\t\t\t2\t\t%s (Unknown)\n" % int_to_hexstring(self.font_style, little_endian=False, number_of_hex_digits=2)
 		out += "Text\t\t\t\t\t\t\t%s (%s)" % (utf8_to_utf16hexstring(self.text), self.text)
+		return out
+
+
+class EntityBarcode:
+	"""
+	Barcode entity, the same as text except font style is set to bar code
+
+	Part					Length	Data
+	DataLength				2		07(7*2=14 bytes length of following segment) 15(21*2=42B)
+	Vertical				3		010(1), 020(2), FF0(255), 001(256), FF1(511), 002(512)
+	Horizontal				3		001(1), 003(3), 0FF(255), 1FF(511), 200(512)
+	DrawStyle				2		00(Normal), 55(Red), AA(Red and Inversed FG BG), FF(Inverse FG BG)
+	FontStyle				2		See Font Styles
+	Text							0041(A) UTF-16 00410042(AB)
+	41(Barcode EAN13) Start Code B 0088(UTF-16 HTS), Encoded data (Ex. 0037 7 0033 3 0031 1 0031 1 0032 2 0035 5 0030 0 0030 0 0030 0 0039 9 0034 4 0031 1), Check Digit (Ex. 0039 9), Stop 003D 008A(UTF-16 VTS)
+	42(Barcode 128) Start Code B 0088(UTF-16 HTS), Encoded data (Ex. 0031 1, 0030 0), Check Digit (Ex. 0052 R), Stop 008A(UTF-16 VTS)
+	"""
+	def __init__(self, raw="", vertical=0, horizontal=0, draw_style=0, font_style=0, text=""):
+		# Barcodes that is supported now, some other check digits etc. might be needed
+		self.supported_barcodes = [FontStylesInv['Barcode EAN13'], FontStylesInv['Barcode 128'], FontStylesInv['Barcode EAN13 Double Size'], FontStylesInv['Barcode 128 Double Size']]
+		if len(raw) > 0:
+			self._raw = raw
+			self.length = hexstring_to_int(self._raw[0:2], little_endian=False)*2
+			if len(self._raw) != self.length+2:
+				raise Exception(f'Barcode packet length field does not match up with actual size, this string is {len(self._raw)} Packet: {self._raw}')
+			self.vertical = hexstring_to_int(self._raw[2:5], little_endian=True)
+			self.horizontal = hexstring_to_int(self._raw[5:8], little_endian=False)
+			self.draw_style = hexstring_to_int(self._raw[8:10], little_endian=False)
+			self.font_style = hexstring_to_int(self._raw[10:12], little_endian=False)
+			rawtext = self._raw[12:]
+			if self.font_style in [FontStylesInv['Barcode 128'], FontStylesInv['Barcode 128 Double Size']]:
+				self.text = rawtext[4:-8]  # Skip first start code, and last check digit and stop
+			if self.font_style in [FontStylesInv['Barcode EAN13'], FontStylesInv['Barcode EAN13 Double Size']]:
+				if len(rawtext) != (1*4)+(13*4)+(2*4):
+					raise Exception("Can't read EAN 13, expected length to be 1 start + 13 digits + 2 stop.")
+				self.text = rawtext[4:-12]  # Skip first start code, and last check digit and stop
+			self.text = utf16hexstring_to_utf8(self.text)
+		else:
+			self.length = 0
+			self.vertical = vertical
+			self.horizontal = horizontal
+			self.draw_style = draw_style
+			self.font_style = font_style
+			self.text = text
+		self.prefix = "0088"  # Start Code B 0088(UTF-16 HTS), also used by EAN 13
+		if self.font_style not in self.supported_barcodes:
+			raise Exception("Only Barcode 128 and EAN13 is supported.")
+		# Barcode 128
+		if self.font_style in [FontStylesInv['Barcode 128'], FontStylesInv['Barcode 128 Double Size']]:
+			if len(self.text) < 1:
+				raise Exception("Barcode 128 musbe more than 0 cahracters.")
+			if not validate_barcode128b_characters(self.text):
+				raise Exception("Only characters belonging to Barcode 128 B is valid.")
+			self.suffix = utf8_to_utf16hexstring(calculate_barcode128b_check_digit(self.text))
+			self.suffix += "008A"  # Stop 008A(UTF-16 VTS)
+		# EAN 13
+		if self.font_style in [FontStylesInv['Barcode EAN13'], FontStylesInv['Barcode EAN13 Double Size']]:
+			if len(self.text) != 12:
+				raise Exception("EAN 13 must bra 12 digits, the 13th is check digit and it will be calculated automatically.")
+			if not validate_ean13_characters(self.text):
+				raise Exception("EAN 13 can only contain digits.")
+			self.suffix = utf8_to_utf16hexstring(calculate_ean13_check_digit(self.text))
+			self.suffix += "003D"  # Hardcoded for EAN13?
+			self.suffix += "008A"  # Stop 008A(UTF-16 VTS)
+
+	def __repr__(self):
+		"""
+		Build and return a barcode entity package
+		:return: str representing entity
+		"""
+		# Start with packet, then add length of packet
+		out = ""
+		out += int_to_hexstring(self.vertical, little_endian=True, number_of_hex_digits=3)
+		out += int_to_hexstring(self.horizontal, little_endian=False, number_of_hex_digits=3)
+		out += int_to_hexstring(self.draw_style, little_endian=False, number_of_hex_digits=2)
+		out += int_to_hexstring(self.font_style, little_endian=False, number_of_hex_digits=2)
+		out += self.prefix
+		out += utf8_to_utf16hexstring(self.text)
+		out += self.suffix
+		length = int_to_hexstring(int(len(out)/2), little_endian=False, number_of_hex_digits=2)
+		out = length + out
+		return out
+
+	def __str__(self):
+		"""
+		Build a human readable packet
+		:return: str
+		"""
+		out = "Entity Barcode package\n"
+		out += "Part\t\t\t\t\tLength\tData\n"
+		length = len(self.__repr__())-2
+		out += "DataLengthSegment\t\t2\t\t%s (%d*2=%d bytes)\n" % (int_to_hexstring(int(length/2), little_endian=False, number_of_hex_digits=2), int(length/2), length)
+		out += "Vertical\t\t\t\t3\t\t%s (%d)\n" % (int_to_hexstring(self.vertical, little_endian=True, number_of_hex_digits=3), self.vertical)
+		out += "Horizontal\t\t\t\t3\t\t%s (%d)\n" % (int_to_hexstring(self.horizontal, little_endian=False, number_of_hex_digits=3), self.horizontal)
+		if self.draw_style in DrawStyles:
+			out += "DrawStyle\t\t\t\t2\t\t%s (%s)\n" % (int_to_hexstring(self.draw_style, little_endian=False, number_of_hex_digits=2), DrawStyles[self.draw_style])
+		else:
+			out += "DrawStyle\t\t\t\t2\t\t%s (Unknown)\n" % int_to_hexstring(self.draw_style, little_endian=False, number_of_hex_digits=2)
+		if self.font_style in FontStyles:
+			out += "FontStyle\t\t\t\t2\t\t%s (%s)\n" % (int_to_hexstring(self.font_style, little_endian=False, number_of_hex_digits=2), FontStyles[self.font_style])
+		else:
+			out += "FontStyle\t\t\t\t2\t\t%s (Unknown)\n" % int_to_hexstring(self.font_style, little_endian=False, number_of_hex_digits=2)
+		out += "Prefix\t\t\t\t\t\t\t%s (Start code)\n" % self.prefix
+		out += "Text\t\t\t\t\t\t\t%s (%s)\n" % (utf8_to_utf16hexstring(self.text), self.text)
+		out += "Suffix\t\t\t\t\t\t\t%s (Check Digit and Stop code)" % self.suffix
 		return out
 
 
@@ -256,3 +363,7 @@ class Answer:
 # print(EntityText("1701000100020059006F0020006D0061006D006D00610021").__str__())
 # print(EntityText("0701000100020041").__str__())
 # print(EntityText("09010001000200410061").__str__())
+# print(EntityBarcode("0D010001004200880039003A008A").__str__())
+# print(EntityBarcode("0F01000100420088003100300052008A").__str__())
+# print(EntityBarcode("25010001004100880037003300310031003200350030003000300039003400310039003D008A").__str__())
+# print(EntityBarcode("25010001004900880037003300310031003200350030003000300039003400310039003D008A").__str__())
