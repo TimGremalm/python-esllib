@@ -261,6 +261,82 @@ class EntityRectangle:
 		return out
 
 
+
+
+class EntityLine:
+	"""
+	Line entity, no support in Demo Tool
+
+	Part					Length	Data
+	DataLengthSegment		2		07(7*2=14 bytes for lines)
+	Vertical				3		010(1), 020(2), FF0(255), 001(256), FF1(511), 002(512)
+	Horizontal				3		001(1), 003(3), 0FF(255), 1FF(511), 200(512)
+	DrawStyle				2		00(Normal), 55(Red), AA(Red and Inversed FG BG), FF(Inverse FG BG)
+	FontStyle				2		62(Hline), 63(Vline)
+	Border?					4		0002(2px?) Some integer?
+	"""
+	def __init__(self, raw="", vertical=0, horizontal=0, draw_style=0, font_style=0, border=0):
+		if len(raw) > 0:
+			self._raw = raw
+			self.length = hexstring_to_int(self._raw[0:2], little_endian=False)*2
+			if self.length != 14:
+				raise Exception(f'Rectangle package is always 2+14 byte.')
+			self.vertical = hexstring_to_int(self._raw[2:5], little_endian=True)
+			self.horizontal = hexstring_to_int(self._raw[5:8], little_endian=False)
+			self.draw_style = hexstring_to_int(self._raw[8:10], little_endian=False)
+			self.font_style = hexstring_to_int(self._raw[10:12], little_endian=False)
+			self.border = hexstring_to_int(self._raw[12:16], little_endian=False)
+		else:
+			self.length = 0
+			self.vertical = vertical
+			self.horizontal = horizontal
+			self.draw_style = draw_style
+			self.font_style = font_style
+			self.border = border
+		if self.font_style not in [FontStylesInv["Horizontal Line"], FontStylesInv["Vertical Line"]]:
+			raise Exception("Draw style for line must be %02X (Horizontal Line) or %02X (Vertical Line)." % (FontStylesInv["Horizontal Line"], FontStylesInv["Vertical Line"]))
+
+	def __repr__(self):
+		"""
+		Build and return a line entity package
+		:return: str representing entity
+		"""
+		# Start with packet, then add length of packet
+		out = ""
+		out += int_to_hexstring(self.vertical, little_endian=True, number_of_hex_digits=3)
+		out += int_to_hexstring(self.horizontal, little_endian=False, number_of_hex_digits=3)
+		out += int_to_hexstring(self.draw_style, little_endian=False, number_of_hex_digits=2)
+		out += int_to_hexstring(self.font_style, little_endian=False, number_of_hex_digits=2)
+		out += int_to_hexstring(self.border, little_endian=False, number_of_hex_digits=4)
+		length = int_to_hexstring(int(len(out)/2), little_endian=False, number_of_hex_digits=2)
+		out = length + out
+		return out
+
+	def __str__(self):
+		"""
+		Build a human readable packet
+		:return: str
+		"""
+		out = "Entity Line package\n"
+		out += "Part\t\t\t\t\tLength\tData\n"
+		length = len(self.__repr__())-2
+		out += "DataLengthSegment\t\t2\t\t%s (%d*2=%d bytes)\n" % (int_to_hexstring(int(length/2), little_endian=False, number_of_hex_digits=2), int(length/2), length)
+		out += "Vertical\t\t\t\t3\t\t%s (%d)\n" % (int_to_hexstring(self.vertical, little_endian=True, number_of_hex_digits=3), self.vertical)
+		out += "Horizontal\t\t\t\t3\t\t%s (%d)\n" % (int_to_hexstring(self.horizontal, little_endian=False, number_of_hex_digits=3), self.horizontal)
+		if self.font_style in FontStyles:
+			out += "FontStyle\t\t\t\t2\t\t%s (%s)\n" % (int_to_hexstring(self.font_style, little_endian=False, number_of_hex_digits=2), FontStyles[self.font_style])
+		else:
+			out += "FontStyle\t\t\t\t2\t\t%s (Unknown)\n" % int_to_hexstring(self.font_style, little_endian=False, number_of_hex_digits=2)
+		if self.draw_style in DrawStyles:
+			out += "DrawStyle\t\t\t\t2\t\t%s (%s)\n" % (int_to_hexstring(self.draw_style, little_endian=False, number_of_hex_digits=2), DrawStyles[self.draw_style])
+		else:
+			out += "DrawStyle\t\t\t\t2\t\t%s (Unknown)\n" % int_to_hexstring(self.draw_style, little_endian=False, number_of_hex_digits=2)
+		out += "Height\t\t\t\t\t4\t\t%s (%d px?)\n" % (int_to_hexstring(self.height, little_endian=False, number_of_hex_digits=4), self.height)
+		out += "Width\t\t\t\t\t4\t\t%s (%d px?)\n" % (int_to_hexstring(self.width, little_endian=False, number_of_hex_digits=4), self.width)
+		out += "Border?\t\t\t\t\t4\t\t%s (%d px?)\n" % (int_to_hexstring(self.border, little_endian=False, number_of_hex_digits=4), self.border)
+		return out
+
+
 class EntityLEDData:
 	"""
 	This enity describes how the display tag will flash after a update.
