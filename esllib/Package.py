@@ -323,16 +323,14 @@ class EntityLine:
 		out += "DataLengthSegment\t\t2\t\t%s (%d*2=%d bytes)\n" % (int_to_hexstring(int(length/2), little_endian=False, number_of_hex_digits=2), int(length/2), length)
 		out += "Vertical\t\t\t\t3\t\t%s (%d)\n" % (int_to_hexstring(self.vertical, little_endian=True, number_of_hex_digits=3), self.vertical)
 		out += "Horizontal\t\t\t\t3\t\t%s (%d)\n" % (int_to_hexstring(self.horizontal, little_endian=False, number_of_hex_digits=3), self.horizontal)
-		if self.font_style in FontStyles:
-			out += "FontStyle\t\t\t\t2\t\t%s (%s)\n" % (int_to_hexstring(self.font_style, little_endian=False, number_of_hex_digits=2), FontStyles[self.font_style])
-		else:
-			out += "FontStyle\t\t\t\t2\t\t%s (Unknown)\n" % int_to_hexstring(self.font_style, little_endian=False, number_of_hex_digits=2)
 		if self.draw_style in DrawStyles:
 			out += "DrawStyle\t\t\t\t2\t\t%s (%s)\n" % (int_to_hexstring(self.draw_style, little_endian=False, number_of_hex_digits=2), DrawStyles[self.draw_style])
 		else:
 			out += "DrawStyle\t\t\t\t2\t\t%s (Unknown)\n" % int_to_hexstring(self.draw_style, little_endian=False, number_of_hex_digits=2)
-		out += "Height\t\t\t\t\t4\t\t%s (%d px?)\n" % (int_to_hexstring(self.height, little_endian=False, number_of_hex_digits=4), self.height)
-		out += "Width\t\t\t\t\t4\t\t%s (%d px?)\n" % (int_to_hexstring(self.width, little_endian=False, number_of_hex_digits=4), self.width)
+		if self.font_style in FontStyles:
+			out += "FontStyle\t\t\t\t2\t\t%s (%s)\n" % (int_to_hexstring(self.font_style, little_endian=False, number_of_hex_digits=2), FontStyles[self.font_style])
+		else:
+			out += "FontStyle\t\t\t\t2\t\t%s (Unknown)\n" % int_to_hexstring(self.font_style, little_endian=False, number_of_hex_digits=2)
 		out += "Border?\t\t\t\t\t4\t\t%s (%d px?)\n" % (int_to_hexstring(self.border, little_endian=False, number_of_hex_digits=4), self.border)
 		return out
 
@@ -526,3 +524,4 @@ class Answer:
 # print(EntityBarcode("25010001004100880037003300310031003200350030003000300039003400310039003D008A").__str__())
 # print(EntityBarcode("25010001004900880037003300310031003200350030003000300039003400310039003D008A").__str__())
 # print(EntityRectangle("0B0100016400003200320001").__str__())
+# print(EntityLine("0701000100620001").__str__())
