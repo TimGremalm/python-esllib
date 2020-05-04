@@ -1,6 +1,8 @@
+from PIL import Image
 from esllib.barcode import validate_barcode128b_characters, validate_ean13_characters, \
 	calculate_barcode128b_check_digit, calculate_ean13_check_digit
-from esllib.conversion import int_to_hexstring, hexstring_to_int, utf8_to_utf16hexstring, utf16hexstring_to_utf8
+from esllib.conversion import int_to_hexstring, hexstring_to_int, utf8_to_utf16hexstring, utf16hexstring_to_utf8, \
+	image_to_black_and_colored_pixel_strings, compress_pixel_array
 from esllib.enums import AnswerTagStatus, DrawStyles, FontStyles, FontStylesInv
 
 
@@ -337,7 +339,7 @@ class EntityLine:
 
 class EntityLEDData:
 	"""
-	This enity describes how the display tag will flash after a update.
+	This entity describes how the display tag will flash after a update.
 
 	Part					Length	Data
 	DataLengthSegment		2		07(7*2=14B) Always 07 for LEDData
@@ -424,6 +426,92 @@ class EntityLEDData:
 		out += "Hardcoded\t\t\t\t4\t\t00ED Hardcoded value\n"
 		out += "FlashTimes\t\t\t\t4\t\t%s (%d)\n" % (int_to_hexstring(self.flash_times, little_endian=False,
 																		number_of_hex_digits=4), self.flash_times)
+		return out
+
+
+class EntityImage:
+	"""
+	Image entity
+
+	Part					Length	Data
+	ImageType				2		FC(ImageCompress), FD(ImageX2), FE(Image)
+	X						4		0000 X position
+	Y						4		0000 Y position
+	Height					4		0067(104-1=103), 007F(128-1=127), 012B(300-1=299), 017F(384-1=383)
+	Width					4		00D7(215-1=214 (should be 212-1, but Demo tool scales image incorrectly)), 0127(296-1=295 (should be 292-1, but Demo tool scales image incorrectly))), 018F(400-1=399), 027F(640-1=239)
+	Size					8		00000004(SizeOfData/2=4)
+	ImageData						Data is a compressed image C000B957(212x104px Black pixel top left 1x1)
+									If a second red color is used, append that struct here.
+	ImageType				2		FC(ImageCompress)
+	Filler					1		8 hardcoded
+	X						3		000 X position
+	Y						4		0000 Y position
+	Filler					1		8 hardcoded
+	Height					3		0067(104-1=103), 007F(128-1=127), 012B(300-1=299), 017F(384-1=383)
+	Width					4		00D7(215-1=214 (should be 212-1, but Demo tool scales image incorrectly)), 0127(296-1=295 (should be 292-1, but Demo tool scales image incorrectly))), 018F(400-1=399), 027F(640-1=239)
+	Size					8		00000004()
+	ImageData
+	"""
+	def __init__(self, raw="", x: int = 0, y: int = 0, image: Image = None, colored_image: bool = False):
+		if len(raw) > 0:
+			self._raw = raw
+			self.length = hexstring_to_int(self._raw[0:2], little_endian=False)*2
+		else:
+			self.x = x
+			self.y = y
+			self.image = image
+			self.colored_image = colored_image
+			self.width = self.image.width
+			self.height = self.image.height
+			self.length = 0
+
+	def __repr__(self):
+		"""
+		Build and return a text entity package
+		:return: str representing entity
+		"""
+		out = "FC"  # Start header for compressed image
+		out += int_to_hexstring(self.x, little_endian=False, number_of_hex_digits=4)
+		out += int_to_hexstring(self.y, little_endian=False, number_of_hex_digits=4)
+		out += int_to_hexstring(self.height-1, little_endian=False, number_of_hex_digits=4)
+		out += int_to_hexstring(self.width-1, little_endian=False, number_of_hex_digits=4)
+		image_black_raw, image_color_raw = image_to_black_and_colored_pixel_strings(self.image)
+		image_black_compressed = compress_pixel_array(image_black_raw)
+		out += int_to_hexstring(int(len(image_black_compressed)/2), little_endian=False, number_of_hex_digits=8)
+		out += image_black_compressed
+		if self.colored_image:
+			out += "FC"
+			out += "8"
+			out += int_to_hexstring(self.x, little_endian=False, number_of_hex_digits=3)
+			out += int_to_hexstring(self.y, little_endian=False, number_of_hex_digits=4)
+			out += "8"
+			out += int_to_hexstring(self.height - 1, little_endian=False, number_of_hex_digits=3)
+			out += int_to_hexstring(self.width - 1, little_endian=False, number_of_hex_digits=4)
+			image_color_compressed = compress_pixel_array(image_color_raw)
+			out += int_to_hexstring(int(len(image_color_compressed)/2), little_endian=False, number_of_hex_digits=8)
+			out += image_color_compressed
+		return out
+
+	def __str__(self):
+		"""
+		Build a human readable packet
+		:return: str
+		"""
+		out = "Entity Text package\n"
+		out += "Part\t\t\t\t\tLength\tData\n"
+		length = len(self.__repr__())-2
+		out += "DataLengthSegment\t\t2\t\t%s (%d*2=%d bytes)\n" % (int_to_hexstring(int(length/2), little_endian=False, number_of_hex_digits=2), int(length/2), length)
+		out += "Vertical\t\t\t\t3\t\t%s (%d)\n" % (int_to_hexstring(self.vertical, little_endian=True, number_of_hex_digits=3), self.vertical)
+		out += "Horizontal\t\t\t\t3\t\t%s (%d)\n" % (int_to_hexstring(self.horizontal, little_endian=False, number_of_hex_digits=3), self.horizontal)
+		if self.draw_style in DrawStyles:
+			out += "DrawStyle\t\t\t\t2\t\t%s (%s)\n" % (int_to_hexstring(self.draw_style, little_endian=False, number_of_hex_digits=2), DrawStyles[self.draw_style])
+		else:
+			out += "DrawStyle\t\t\t\t2\t\t%s (Unknown)\n" % int_to_hexstring(self.draw_style, little_endian=False, number_of_hex_digits=2)
+		if self.font_style in FontStyles:
+			out += "FontStyle\t\t\t\t2\t\t%s (%s)\n" % (int_to_hexstring(self.font_style, little_endian=False, number_of_hex_digits=2), FontStyles[self.font_style])
+		else:
+			out += "FontStyle\t\t\t\t2\t\t%s (Unknown)\n" % int_to_hexstring(self.font_style, little_endian=False, number_of_hex_digits=2)
+		out += "Text\t\t\t\t\t\t\t%s (%s)" % (utf8_to_utf16hexstring(self.text), self.text)
 		return out
 
 
