@@ -475,10 +475,10 @@ class EntityImage:
 		out += int_to_hexstring(self.y, little_endian=False, number_of_hex_digits=4)
 		out += int_to_hexstring(self.height-1, little_endian=False, number_of_hex_digits=4)
 		out += int_to_hexstring(self.width-1, little_endian=False, number_of_hex_digits=4)
-		image_black_raw, image_color_raw = image_to_black_and_colored_pixel_strings(self.image)
-		image_black_compressed = compress_pixel_array(image_black_raw)
-		out += int_to_hexstring(int(len(image_black_compressed)/2), little_endian=False, number_of_hex_digits=8)
-		out += image_black_compressed
+		self.image_black_raw, self.image_color_raw = image_to_black_and_colored_pixel_strings(self.image)
+		self.image_black_compressed = compress_pixel_array(self.image_black_raw)
+		out += int_to_hexstring(int(len(self.image_black_compressed)/2), little_endian=False, number_of_hex_digits=8)
+		out += self.image_black_compressed
 		if self.colored_image:
 			out += "FC"
 			out += "8"
@@ -487,9 +487,9 @@ class EntityImage:
 			out += "8"
 			out += int_to_hexstring(self.height - 1, little_endian=False, number_of_hex_digits=3)
 			out += int_to_hexstring(self.width - 1, little_endian=False, number_of_hex_digits=4)
-			image_color_compressed = compress_pixel_array(image_color_raw)
-			out += int_to_hexstring(int(len(image_color_compressed)/2), little_endian=False, number_of_hex_digits=8)
-			out += image_color_compressed
+			self.image_color_compressed = compress_pixel_array(self.image_color_raw)
+			out += int_to_hexstring(int(len(self.image_color_compressed)/2), little_endian=False, number_of_hex_digits=8)
+			out += self.image_color_compressed
 		return out
 
 	def __str__(self):
@@ -497,21 +497,27 @@ class EntityImage:
 		Build a human readable packet
 		:return: str
 		"""
-		out = "Entity Text package\n"
+		repr = self.__repr__()
+		out = "Entity Image package\n"
 		out += "Part\t\t\t\t\tLength\tData\n"
-		length = len(self.__repr__())-2
-		out += "DataLengthSegment\t\t2\t\t%s (%d*2=%d bytes)\n" % (int_to_hexstring(int(length/2), little_endian=False, number_of_hex_digits=2), int(length/2), length)
-		out += "Vertical\t\t\t\t3\t\t%s (%d)\n" % (int_to_hexstring(self.vertical, little_endian=True, number_of_hex_digits=3), self.vertical)
-		out += "Horizontal\t\t\t\t3\t\t%s (%d)\n" % (int_to_hexstring(self.horizontal, little_endian=False, number_of_hex_digits=3), self.horizontal)
-		if self.draw_style in DrawStyles:
-			out += "DrawStyle\t\t\t\t2\t\t%s (%s)\n" % (int_to_hexstring(self.draw_style, little_endian=False, number_of_hex_digits=2), DrawStyles[self.draw_style])
-		else:
-			out += "DrawStyle\t\t\t\t2\t\t%s (Unknown)\n" % int_to_hexstring(self.draw_style, little_endian=False, number_of_hex_digits=2)
-		if self.font_style in FontStyles:
-			out += "FontStyle\t\t\t\t2\t\t%s (%s)\n" % (int_to_hexstring(self.font_style, little_endian=False, number_of_hex_digits=2), FontStyles[self.font_style])
-		else:
-			out += "FontStyle\t\t\t\t2\t\t%s (Unknown)\n" % int_to_hexstring(self.font_style, little_endian=False, number_of_hex_digits=2)
-		out += "Text\t\t\t\t\t\t\t%s (%s)" % (utf8_to_utf16hexstring(self.text), self.text)
+		out += "ImageType\t\t\t\t2\t\tFC(ImageCompress)\n"
+		out += "X\t\t\t\t\t\t4\t\t%s (%d)\n" % (int_to_hexstring(self.x, little_endian=False, number_of_hex_digits=4), self.x)
+		out += "Y\t\t\t\t\t\t4\t\t%s (%d)\n" % (int_to_hexstring(self.y, little_endian=False, number_of_hex_digits=4), self.y)
+		out += "Height\t\t\t\t\t4\t\t%s (%d-1=%d)\n" % (int_to_hexstring(self.height-1, little_endian=False, number_of_hex_digits=4), self.height, self.height-1)
+		out += "Width\t\t\t\t\t4\t\t%s (%d-1=%d)\n" % (int_to_hexstring(self.width-1, little_endian=False, number_of_hex_digits=4), self.width, self.width-1)
+		out += "Size\t\t\t\t\t8\t\t%s (%d/2=%d)\n" % (int_to_hexstring(int(len(self.image_black_compressed)/2), little_endian=False, number_of_hex_digits=8), len(self.image_black_compressed), int(len(self.image_black_compressed)/2))
+		out += "ImageData\t\t\t\t\t\t%s\n" % self.image_black_compressed
+		if self.colored_image:
+			out += "Image color part follows.\n"
+			out += "ImageType\t\t\t\t2\t\tFC(ImageCompress)\n"
+			out += "Filler\t\t\t\t\t1\t\t8 (Hardcoded for color part)\n"
+			out += "X\t\t\t\t\t\t3\t\t%s (%d)\n" % (int_to_hexstring(self.x, little_endian=False, number_of_hex_digits=3), self.x)
+			out += "Y\t\t\t\t\t\t4\t\t%s (%d)\n" % (int_to_hexstring(self.y, little_endian=False, number_of_hex_digits=4), self.y)
+			out += "Filler\t\t\t\t\t1\t\t8 (Hardcoded for color part)\n"
+			out += "Height\t\t\t\t\t3\t\t%s (%d-1=%d)\n" % (int_to_hexstring(self.height-1, little_endian=False, number_of_hex_digits=3), self.height, self.height-1)
+			out += "Width\t\t\t\t\t4\t\t%s (%d-1=%d)\n" % (int_to_hexstring(self.width-1, little_endian=False, number_of_hex_digits=4), self.width, self.width-1)
+			out += "Size\t\t\t\t\t8\t\t%s (%d/2=%d)\n" % (int_to_hexstring(int(len(self.image_color_compressed)/2), little_endian=False, number_of_hex_digits=8), len(self.image_color_compressed), int(len(self.image_color_compressed)/2))
+			out += "ImageData\t\t\t\t\t\t%s\n" % self.image_color_compressed
 		return out
 
 
