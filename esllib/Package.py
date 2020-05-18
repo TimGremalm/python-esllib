@@ -2,7 +2,7 @@ from PIL import Image
 from esllib.barcode import validate_barcode128b_characters, validate_ean13_characters, \
 	calculate_barcode128b_check_digit, calculate_ean13_check_digit
 from esllib.conversion import int_to_hexstring, hexstring_to_int, utf8_to_utf16hexstring, utf16hexstring_to_utf8, \
-	image_to_black_and_colored_pixel_strings, compress_pixel_array
+	image_to_black_and_colored_pixel_strings, compress_pixel_array, uncompress_pixel_array, pixel_string_to_image
 from esllib.enums import AnswerTagStatus, DrawStyles, FontStyles, FontStylesInv
 
 
@@ -455,7 +455,44 @@ class EntityImage:
 	def __init__(self, raw="", x: int = 0, y: int = 0, image: Image = None, colored_image: bool = False):
 		if len(raw) > 0:
 			self._raw = raw
-			self.length = hexstring_to_int(self._raw[0:2], little_endian=False)*2
+			if self._raw[0:2] != "FC":
+				raise Exception("Expected image to start with FC")
+			self.x = hexstring_to_int(self._raw[2:6], little_endian=False)
+			self.y = hexstring_to_int(self._raw[6:10], little_endian=False)
+			self.height = hexstring_to_int(self._raw[10:14], little_endian=False) + 1
+			self.width = hexstring_to_int(self._raw[14:18], little_endian=False) + 1
+			image_black_size = hexstring_to_int(self._raw[18:26], little_endian=False)*2
+			image_black_end = 26+image_black_size
+			image_black_compressed = self._raw[26:image_black_end]
+			image_black_raw = uncompress_pixel_array(image_black_compressed)
+			self.image = Image.new('RGB', (self.width, self.height), "white")  # Init blank image
+			pixel_string_to_image(self.image, image_black_raw)
+			# Check if there is more data, that would inicate color data
+			if (len(self._raw)-26) > image_black_size:
+				self.colored_image = True
+				color_part = self._raw[image_black_end:]
+				if color_part[0:3] != "FC8":
+					raise Exception("Expected color image to start with FC8")
+				color_x = hexstring_to_int(color_part[3:6], little_endian=False)
+				color_y = hexstring_to_int(color_part[6:10], little_endian=False)
+				color_height = hexstring_to_int(color_part[11:14], little_endian=False) + 1
+				color_width = hexstring_to_int(color_part[14:18], little_endian=False) + 1
+				if color_x != self.x:
+					raise Exception(f"Expected color x parameter to be {self.x}, but it is {color_x}")
+				if color_y != self.y:
+					raise Exception(f"Expected color y parameter to be {self.y}, but it is {color_y}")
+				if color_height != self.height:
+					raise Exception(f"Expected color height parameter to be {self.height}, but it is {color_height}")
+				if color_width != self.width:
+					raise Exception(f"Expected color width parameter to be {self.width}, but it is {color_width}")
+				image_color_size = hexstring_to_int(color_part[18:26], little_endian=False)*2
+				image_color_compressed = color_part[26:]
+				if len(image_color_compressed) != image_color_size:
+					raise Exception(f"Expected color image to be {image_color_size} long, but it is {len(image_color_compressed)}")
+				image_color_raw = uncompress_pixel_array(image_color_compressed)
+				pixel_string_to_image(self.image, image_color_raw, (255, 0, 0))
+			else:
+				self.colored_image = False
 		else:
 			self.x = x
 			self.y = y
@@ -463,7 +500,6 @@ class EntityImage:
 			self.colored_image = colored_image
 			self.width = self.image.width
 			self.height = self.image.height
-			self.length = 0
 
 	def __repr__(self):
 		"""

@@ -124,10 +124,28 @@ def image_to_black_and_colored_pixel_strings(image: Image) -> (list, list):
 	return pixels_black, pixels_color
 
 
+def pixel_string_to_image(image: Image, pixels: list, color=(0, 0, 0)):
+	"""
+	Draw pixels on top of Pillow Image.
+	Only filled pixels will be drawn.
+
+	:param image: Pillow Image to write pixels on
+	:param pixels: list of pixels to write, 0 is a non filled pixel, 1 is a filled pixel
+	:param color: tuple of 3 representing R, G & B to draw on filled pixels
+	"""
+	pixel_access = image.load()
+	for i, value in enumerate(pixels):
+		if value:
+			x = i % image.width
+			y = int(i / image.width)
+			pixel_access[x, y] = color
+
+
 def compress_pixel_array(inputstring: list) -> str:
 	"""
+	Compress pixel array with RLE (Run Length Encoding)
 
-	:param inputstring: list of ints representing pixels to compress
+	:param inputstring: list of ints representing pixels to compress, 0 is a non filled pixel, 1 is a filled pixel
 	:return: str compressed
 	"""
 	pixel_counter = 0
@@ -185,3 +203,73 @@ def compress_pixel_array(inputstring: list) -> str:
 			compressed_pixels += int_to_hexstring(count_until_colorchange, little_endian=True, number_of_hex_digits=4)
 			pixel_counter += count_until_colorchange
 	return compressed_pixels
+
+
+def uncompress_pixel_array(inputstring: str) -> list:
+	"""
+	Un-compress RLE (Run Length Encoding) to pixel array
+
+	:param inputstring: str compressed data
+	:return: list of ints representing pixels, 0 is a non filled pixel, 1 is a filled pixel
+	"""
+	out = []
+	byte_counter = 0
+	# Go through compressed data
+	while byte_counter < len(inputstring):
+		# Read byte at counter
+		current_string = inputstring[byte_counter:byte_counter+2]
+		current_byte = hexstring_to_int(current_string, little_endian=False)
+		# Check if pixel pattern or color string
+		if current_byte & 0b10000000:
+			# If 8:th bit is set, it's a pixel pattern
+			# Bit pattern 1 byte (1 for pixel pattern, pattern)
+			# 0xC0(0b11000000) 1 black pixel, 5 white pixels
+			# 0xE0(0b11100000) 2 black pixels, 4 white pixels
+			# Check set pixels in pixel pattern (6 pixels)
+			for i in range(6, 0, -1):
+				if current_byte & (1 << i):
+					# Black/Colored pixel
+					out.append(1)
+				else:
+					# White pixel
+					out.append(0)
+			# pixel pattern is 1 byte, increase counter by 1*2
+			byte_counter += 1 * 2
+		else:
+			# If 8:th bit is unset, it's a color string
+			pixel_count = 0
+			pixel_type = 1
+			if current_byte == 0b00000001 or current_byte == 0b01000001:
+				# Middle color string 2 bytes (0 for color string, pixel type, 000001 for 1B length) (number of pixels])
+				# 0x01(0b00000001) 0x20(0b00010100) 32 white pixels
+				# 0x41(0b01000001) 0x20(0b00010100) 32 black pixels
+				pixel_count = hexstring_to_int(inputstring[byte_counter+2:byte_counter+4], little_endian=False)
+				if current_byte == 0b00000001:
+					pixel_type = 0  # White string
+				else:
+					pixel_type = 1  # Black/colored string
+				byte_counter += 2 * 2
+			elif current_byte == 0b00000000 or current_byte == 0b01000000:
+				# Long color string 3 bytes (0 for color string, pixel type, 000000 for 2B length) (number of pixels little endian]) (number of pixels big endian])
+				# 0x00(0b00000000) 0xBA 0xD4 54458 white pixels
+				# 0x40(0b01000000) 0x00 0x01 256 black pixels
+				pixel_count = hexstring_to_int(inputstring[byte_counter+2:byte_counter+6], little_endian=True)
+				if current_byte == 0b00000000:
+					pixel_type = 0  # White string
+				else:
+					pixel_type = 1  # Black/colored string
+				byte_counter += 3 * 2
+			else:
+				# Short color string 1 byte (0 for color string, pixel type, number of pixels])
+				# 0x47 0b01000111 0b111 = 7 black pixels
+				# 0x1F 0b00011111 0b11111 = 31 white pixels
+				pixel_count = current_byte & 0b00011111  # Mask the first 5 bits
+				if current_byte & 0b01000000:
+					pixel_type = 1  # Black/colored string
+				else:
+					pixel_type = 0  # White string
+				byte_counter += 1 * 2
+			# Fill pixel string
+			for i in range(pixel_count):
+				out.append(pixel_type)
+	return out
